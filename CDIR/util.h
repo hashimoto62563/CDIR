@@ -17,3 +17,4 @@ string join(vector<string>, string);
 string hexdump(const unsigned char*, size_t);
 vector<pair<string, int>> findfiles(string, bool error=true);
 vector<pair<string, int>> findstreams(const char* cfilepath, bool error = true);
+int chklnks(string filepath);

@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright(C) 2019 Cyber Defense Institute, Inc.
+ * Copyright(C) 2021 Cyber Defense Institute, Inc.
  *
  * This program/include file is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as published
@@ -49,7 +49,7 @@
 
 using namespace std;
 
-typedef FileInfo_t* (__cdecl *StealthOpenFile_func)(char*);
+typedef FileInfo_t* (__cdecl *StealthOpenFile_func)(char*, BOOL);
 typedef int(__cdecl *StealthReadFile_func)(FileInfo_t*, BYTE*, DWORD, ULONGLONG, DWORD*, ULONGLONG*, ULONGLONG);
 typedef void(__cdecl *StealthCloseFile_func)(FileInfo_t*);
 
@@ -76,7 +76,9 @@ param_prefdump = true,
 param_regdump = true,
 param_webdump = true,
 param_wmidump = true,
-param_srumdump = true;
+param_srumdump = true,
+param_lnkdump = true,
+param_infdump = true;
 
 string param_output;
 
@@ -305,7 +307,7 @@ int log_timestamp(char *targetfile, ostringstream *osslog = NULL) {
 
 }
 
-int StealthGetFile(char *filepath, char *outpath, ostringstream *osslog = NULL, BOOL SparseSkip = false) {
+int StealthGetFile(char *filepath, char *outpath, ostringstream *osslog = NULL, BOOL SparseSkip = false, BOOL incdir = false) {
 	//cerr << filepath << endl;
 
 	if (!(StealthOpenFile && StealthReadFile && StealthCloseFile)) {
@@ -328,7 +330,7 @@ int StealthGetFile(char *filepath, char *outpath, ostringstream *osslog = NULL, 
 	ULONG64 offset = 0;
 
 	FileInfo_t *file;
-	if ((file = StealthOpenFile(filepath)) == NULL) {
+	if ((file = StealthOpenFile(filepath, incdir)) == NULL) {
 		fprintf(stderr, "could not open file: %s\n", filepath);
 		return -1;
 	};
@@ -647,6 +649,69 @@ int get_analysisdata_evtx(char *sysdir, char *dstdir, ostringstream *osslog = NU
 	return 0;
 }
 
+
+int get_analysisdata_inf(char* windir, char* dstdir, ostringstream* osslog = NULL) {
+	char findpath[MAX_PATH + 1];
+	char srcpath[MAX_PATH + 1];
+	char dstpath[MAX_PATH + 1];
+
+	sprintf(findpath, "%s\\inf\\setupAPI.dev*.log", windir);
+	mkdir(dstdir);
+	auto files = findfiles(string(findpath));
+	for (auto file : files) {
+		sprintf(srcpath, "%s\\inf\\%s", windir, file.first.c_str());
+		sprintf(dstpath, "%s\\%s", dstdir, file.first.c_str());
+		if (StealthGetFile(srcpath, dstpath, osslog, false)) {
+			if (!WriteWrapper::isLocal())
+				continue;
+			// If StealthGetFile failed and isLocal, then tried copy - workaround
+			char cmdline[1024];
+			DWORD status;
+			sprintf(cmdline, "cmd /c \"copy \"%s\" \"%s\" >> inf\\copy.log 2>&1\"", srcpath, dstpath);
+			if (launchprocess(cmdline, &status))
+				cerr << msg("取得失敗", "failed to save") << ": " << srcpath << endl;
+			else { // hashing & logging
+				if (!osslog)
+					continue;
+
+				if (WriteWrapper::isLocal()) {
+					if (CopyFileTime(srcpath, dstpath)) {
+						fprintf(stderr, "failed to copy filetime: %s\n", srcpath);
+					}
+				}
+
+				log_timestamp(dstpath, osslog);
+				log_hash(dstpath, osslog);
+				*osslog << srcpath << " (copy)";
+				*osslog << "\r\n";
+			}
+		}
+	}
+
+	return 0;
+}
+int get_analysisdata_lnk(char* usrvolume, vector<string> users, ostringstream* osslog = NULL) {
+
+	char dstdir[MAX_PATH + 1];
+	char srcpath[MAX_PATH + 1];
+	char cmdline[1024];
+	DWORD status;
+	for (size_t i = 0; i < users.size(); i++) {
+
+		sprintf(srcpath, "%s\\Users\\%s\\AppData\\Roaming\\Microsoft\\Windows\\Recent", usrvolume, users[i].c_str());
+		sprintf(dstdir, "LNK\\%s", users[i].c_str());
+		if (chklnks(string(srcpath)) == -1)
+			continue;
+		mkdir(dstdir);
+		sprintf(cmdline, "cmd /c \"robocopy \"%s\" \"%s\" *.LNK /COPY:DAT >> LNK\\robocopy.log 2>&1\"", srcpath, dstdir);
+		if (launchprocess(cmdline, &status))
+			cerr << msg("取得失敗", "failed to save") << ": " << srcpath << endl;
+
+
+	}
+
+	return 0;
+}
 int get_analysisdata_web(char *userpath, vector<string> users, string outdirbase, ostringstream *osslog = NULL) {
 	for (auto user : users) {
 		// Firefrox
@@ -1099,6 +1164,29 @@ int get_analysisdata(ostringstream *osslog = NULL) {
 		}
 	}
 
+
+	if (param_lnkdump == true) {
+		// get LNK
+		get_analysisdata_lnk(usrvolume, users, osslog);
+		cerr << msg("LNKファイル 取得完了", "LNK is saved") << endl;
+	}
+
+
+	if (param_infdump == true) {
+		// get setupapi
+
+		get_analysisdata_inf(windir, "inf", osslog);
+		cerr << msg("inf 取得完了", "inf is saved") << endl;
+
+		// Windows.old
+		if (PathIsDirectory(backupdir)) {
+			get_analysisdata_inf(windir_old, "inf_old", osslog);
+			cerr << msg("inf 取得完了(Windows.old)", "inf is saved (Windows.old)") << endl;
+		}
+
+	}
+
+
 	if (param_wmidump == true) {
 		// get WMI data
 		mkdir("WMI");
@@ -1234,7 +1322,7 @@ int main(int argc, char **argv)
 
 	// chack proces name
 	procname = basename(string(argv[0]));
-	cout << msg("CDIR Collector v1.3.5 - 初動対応用データ収集ツール", "CDIR Collector v1.3.5 - Data Acquisition Tool for First Response") << endl;
+	cout << msg("CDIR Collector v1.3.5.9 - 初動対応用データ収集ツール", "CDIR Collector v1.3.5.9 - Data Acquisition Tool for First Response") << endl;
 	cout << msg("Cyber Defense Institute, Inc.\n", "Cyber Defense Institute, Inc.\n") << endl;
 
 	// set curdir -> exedir
@@ -1271,7 +1359,9 @@ int main(int argc, char **argv)
 			{{"Registry", "レジストリ", "Registry"}, &param_regdump},
 			{{"WMI", "WMI", "WMI"}, &param_wmidump},
 			{{"SRUM", "SRUM", "SRUM" }, &param_srumdump},
-			{{"Web", "ブラウザ", "Web"}, &param_webdump}
+			{{"Web", "ブラウザ", "Web"}, &param_webdump},
+			{{"LNK", "LNK", "LNK"},& param_lnkdump},
+			{{"INF", "INF", "INF"},&param_infdump}
 		};
 
 		for (size_t i = 0; i < params.size(); i++) {

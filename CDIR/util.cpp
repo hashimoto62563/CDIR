@@ -46,12 +46,14 @@ void mkdir(char *dirname, bool error) {
 	size_t pos;
 	if ((pos = dirname_s.find_first_of('\\')) == string::npos) {
 		if (dir.isLocal()) {
-			if (!CreateDirectory(dirname, NULL)) {
-				if (error)
-					_perror("CreateDirectory");
+			struct stat st;
+			if( stat(dirname, &st) != 0 ) {
+				if (!CreateDirectory(dirname, NULL)) {
+					if (error)
+						_perror("CreateDirectory");
+				}
 			}
-		}
-		else {
+		} else {
 			dir.mkdir(dirname);
 		}
 		dir.close();
@@ -113,6 +115,20 @@ string hexdump(const unsigned char *s, size_t size) {
 		res << setw(2) << setfill('0') << hex << (unsigned int)s[i];
 	}
 	return res.str();
+}
+
+int chklnks(string filepath) {
+	// return found file and isdir
+	HANDLE hfind;
+	WIN32_FIND_DATA w32fd;
+	vector<pair<string, int>> paths;
+
+	hfind = FindFirstFile(filepath.c_str(), &w32fd);
+
+	if (hfind == INVALID_HANDLE_VALUE) {
+		return -1;
+	}
+	return 0;
 }
 
 vector<pair<string, int>> findfiles(string filepath, bool error) {

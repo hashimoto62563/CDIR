@@ -35,7 +35,7 @@ struct FileInfo_t
 	CAttrBase* data;
 };
 
-extern "C" HANDLE __declspec(dllexport) StealthOpenFile(char* filePathCStr)
+extern "C" HANDLE __declspec(dllexport) StealthOpenFile(char* filePathCStr, BOOL incdir)
 {
 	FileInfo_t* fileInfo = new FileInfo_t;
 	string filePath = string(filePathCStr);
@@ -107,14 +107,18 @@ extern "C" HANDLE __declspec(dllexport) StealthOpenFile(char* filePathCStr)
 		}
 		else
 		{
-			return NULL;
+			if (incdir) {
+				break;
+			}
+			else {
+				return NULL;
+			}
 		}
 
 
 		dirs = dire;
 		dire = filePath.find(_T('\\'), dirs+1);
 	}
-
 	string fileName = filePath.substr(dirs+1, filePath.size()-1);
 	const _TCHAR* fileNameCStr = (const _TCHAR*)fileName.c_str();
 	if (fileInfo->fileRecord->FindSubEntry(fileNameCStr, *(fileInfo->indexEntry)))

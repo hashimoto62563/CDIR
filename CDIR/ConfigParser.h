@@ -39,6 +39,8 @@ static map<string, TYPE_ID, c_ignorecase> CONFIGLIST = {
 	{"Registry", TYPE_BOOL},
 	{"WMI", TYPE_BOOL},
 	{"SRUM", TYPE_BOOL },
+	{"LNK", TYPE_BOOL },
+	{"INF", TYPE_BOOL },
 	{"Web", TYPE_BOOL },
 	{"Output", TYPE_STRING},
 	{"Target", TYPE_STRING},
