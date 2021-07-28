@@ -703,7 +703,7 @@ int get_analysisdata_lnk(char* usrvolume, vector<string> users, ostringstream* o
 		if (chklnks(string(srcpath)) == -1)
 			continue;
 		mkdir(dstdir);
-		sprintf(cmdline, "cmd /c \"robocopy \"%s\" \"%s\" *.LNK /COPY:DAT >> LNK\\robocopy.log 2>&1\"", srcpath, dstdir);
+		sprintf(cmdline, "cmd /c \"robocopy \"%s\" \"%s\" *.LNK *.tmp /COPY:DAT >> LNK\\robocopy.log 2>&1\"", srcpath, dstdir);
 		if (launchprocess(cmdline, &status))
 			cerr << msg("取得失敗", "failed to save") << ": " << srcpath << endl;
 
